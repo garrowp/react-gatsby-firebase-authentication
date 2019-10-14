@@ -20,7 +20,7 @@ Your minimal yet extensive authentication starter project in Gatsby.js with Fire
 
 * uses:
   * only React (**Gatsby.js**)
-  * firebase
+  * firebase (firestore)
 * features:
   * Sign In
   * Sign Up
@@ -114,29 +114,40 @@ GATSBY_CONFIRMATION_EMAIL_REDIRECT=https://mydomain.com
 
 ### Security Rules
 
-In the Firebase console, go to Database, select "Realtime Database" -> Rules, and paste the rules below:
-
 ```
-{
-  "rules": {
-    ".read": false,
-    ".write": false,
-    "users": {
-      "$uid": {
-        ".read": "$uid === auth.uid || root.child('users/'+auth.uid).child('roles').hasChildren(['ADMIN'])",
-        ".write": "$uid === auth.uid || root.child('users/'+auth.uid).child('roles').hasChildren(['ADMIN'])"
-      },
-      ".read": "root.child('users/'+auth.uid).child('roles').hasChildren(['ADMIN'])",
-      ".write": "root.child('users/'+auth.uid).child('roles').hasChildren(['ADMIN'])"
-    },
-    "messages": {
-      ".indexOn": ["createdAt"],
-      "$uid": {
-        ".write": "data.exists() ? data.child('userId').val() === auth.uid : newData.child('userId').val() === auth.uid"
-      },
-      ".read": "auth != null",
-      ".write": "auth != null",
-    },
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Custom functions
+    function signedIn() {
+        return request.auth != null;
+    }
+
+    function isAdmin() {
+        return signedIn() &&
+        	'ADMIN'in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles.values();
+    }
+
+    function isOwner() {
+        return signedIn() && request.auth.uid == resource.data.userId;
+    }
+
+    function isSelf() {
+    	    return signedIn() && request.auth.uid == resource.id;
+    }
+
+    // Rules
+    match /users/{userId} {
+        allow list: if isAdmin();
+    	   allow get, update, delete: if isSelf() || isAdmin();
+    	   allow create: if signedIn();
+    }
+
+    match /messages/{messageId} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+        allow update, delete: if signedIn() && isOwner();
+    }
   }
 }
 ```

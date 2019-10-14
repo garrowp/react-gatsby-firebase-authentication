@@ -13,7 +13,6 @@ const config = {
 
 class Firebase {
   constructor() {
-    console.log(config);
     app.initializeApp(config);
 
     /* Helper */
